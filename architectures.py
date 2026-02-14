@@ -206,12 +206,12 @@ class AttentionPooling(nn.Module):
         return (x * weights).sum(dim=1)
 
 class MambaBiLSTMModel(nn.Module):
-    def __init__(self, drug_dim=256, prot_dim=512, hidden_dim=256, fine_tune=False):
+    def __init__(self, drug_dim=256, prot_dim=512, hidden_dim=256, fine_tune=False, **kwargs):
         super(MambaBiLSTMModel, self).__init__()
         
         # Layer 1: Encoding
-        self.drug_encoder = DrugEncoder(out_channels=drug_dim, fine_tune=fine_tune)
-        self.prot_encoder = ProteinEncoder(out_channels=prot_dim, fine_tune=fine_tune)
+        self.drug_encoder = DrugEncoder(out_channels=drug_dim, fine_tune=fine_tune, smiles_model_name=kwargs.get('smiles_model_name', 'seyonec/ChemBERTa-zinc-base-v1'))
+        self.prot_encoder = ProteinEncoder(out_channels=prot_dim, fine_tune=fine_tune, esm_model_name=kwargs.get('prot_model_name', 'facebook/esm2_t6_8M_UR50D'))
         
         # Projection
         self.drug_proj = nn.Linear(drug_dim, hidden_dim)
@@ -447,14 +447,14 @@ class MambaBiLSTM_SeqOnly(MambaBiLSTMModel):
     Ablation 1: Sequence Only (No Graph Structure)
     Inherits from MambaBiLSTMModel but initializes encoders with use_graph=False
     """
-    def __init__(self, drug_dim=256, prot_dim=512, hidden_dim=256, fine_tune=False):
+    def __init__(self, drug_dim=256, prot_dim=512, hidden_dim=256, fine_tune=False, **kwargs):
         super(MambaBiLSTMModel, self).__init__() # Initialize nn.Module directly to avoid MambaBiLSTMModel.__init__ running encoders with defaults
         
         # Re-implement __init__ logic but with use_graph=False
         
         # Layer 1: Encoding (Seq Only)
-        self.drug_encoder = DrugEncoder(out_channels=drug_dim, fine_tune=fine_tune, use_graph=False)
-        self.prot_encoder = ProteinEncoder(out_channels=prot_dim, fine_tune=fine_tune, use_graph=False)
+        self.drug_encoder = DrugEncoder(out_channels=drug_dim, fine_tune=fine_tune, use_graph=False, smiles_model_name=kwargs.get('smiles_model_name', 'seyonec/ChemBERTa-zinc-base-v1'))
+        self.prot_encoder = ProteinEncoder(out_channels=prot_dim, fine_tune=fine_tune, use_graph=False, esm_model_name=kwargs.get('prot_model_name', 'facebook/esm2_t6_8M_UR50D'))
         
         # Projection
         self.drug_proj = nn.Linear(drug_dim, hidden_dim)
@@ -516,12 +516,12 @@ class TransformerBiLSTMModel(MambaBiLSTMModel):
     """
     Ablation 2: Transformer + BiLSTM (Replace Mamba)
     """
-    def __init__(self, drug_dim=256, prot_dim=512, hidden_dim=256, fine_tune=False):
+    def __init__(self, drug_dim=256, prot_dim=512, hidden_dim=256, fine_tune=False, **kwargs):
         super(MambaBiLSTMModel, self).__init__() # Skip parent init
         
         # Layer 1: Encoding (Standard, with Graph)
-        self.drug_encoder = DrugEncoder(out_channels=drug_dim, fine_tune=fine_tune, use_graph=True)
-        self.prot_encoder = ProteinEncoder(out_channels=prot_dim, fine_tune=fine_tune, use_graph=True)
+        self.drug_encoder = DrugEncoder(out_channels=drug_dim, fine_tune=fine_tune, use_graph=True, smiles_model_name=kwargs.get('smiles_model_name', 'seyonec/ChemBERTa-zinc-base-v1'))
+        self.prot_encoder = ProteinEncoder(out_channels=prot_dim, fine_tune=fine_tune, use_graph=True, esm_model_name=kwargs.get('prot_model_name', 'facebook/esm2_t6_8M_UR50D'))
         
         # Projection
         self.drug_proj = nn.Linear(drug_dim, hidden_dim)
@@ -556,17 +556,23 @@ def get_model(model_name, **kwargs):
     
     if model_name == 'mambabilstm':
         return MambaBiLSTMModel(fine_tune=kwargs.get('fine_tune', False), 
-                                hidden_dim=kwargs.get('hidden_dim', 256))
+                                hidden_dim=kwargs.get('hidden_dim', 256),
+                                smiles_model_name=kwargs.get('smiles_model_name', 'seyonec/ChemBERTa-zinc-base-v1'),
+                                prot_model_name=kwargs.get('prot_model_name', 'facebook/esm2_t6_8M_UR50D'))
                                 
     # Ablation 1: Seq Only
     elif model_name == 'mambabilstmseqonly': 
         return MambaBiLSTM_SeqOnly(fine_tune=kwargs.get('fine_tune', False), 
-                                   hidden_dim=kwargs.get('hidden_dim', 256))
+                                   hidden_dim=kwargs.get('hidden_dim', 256),
+                                   smiles_model_name=kwargs.get('smiles_model_name', 'seyonec/ChemBERTa-zinc-base-v1'),
+                                   prot_model_name=kwargs.get('prot_model_name', 'facebook/esm2_t6_8M_UR50D'))
                                    
     # Ablation 2: Transformer + BiLSTM
     elif model_name == 'transformerbilstm':
         return TransformerBiLSTMModel(fine_tune=kwargs.get('fine_tune', False), 
-                                      hidden_dim=kwargs.get('hidden_dim', 256))
+                                      hidden_dim=kwargs.get('hidden_dim', 256),
+                                      smiles_model_name=kwargs.get('smiles_model_name', 'seyonec/ChemBERTa-zinc-base-v1'),
+                                      prot_model_name=kwargs.get('prot_model_name', 'facebook/esm2_t6_8M_UR50D'))
                                       
     elif 'deep' in model_name: # DeepDTA, DeepConv-DTI
         return DeepDTA(drug_vocab_size=kwargs.get('drug_vocab_size', 600),
