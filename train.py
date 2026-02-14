@@ -95,7 +95,7 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
         # --- 4. 训练配置 ---
         criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(model.parameters(), lr=lr) 
-        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5, verbose=True)
+        scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=5)
         
         best_acc = 0.0
         best_metrics = None
