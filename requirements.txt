@@ -1,0 +1,9 @@
+torch>=1.12.0
+transformers==4.46.0
+torch-geometric>=2.3.0
+scikit-learn
+tqdm
+matplotlib
+numpy<2.0.0
+causal-conv1d>=1.2.0
+mamba-ssm>=1.2.0
