@@ -33,21 +33,10 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
     
     # --- 2. 数据准备 ---
     print("Loading Tokenizers (ChemBERTa & ESM-2)...")
-    
-    # Check for local models
-    local_smiles_model = './models/ChemBERTa'
-    local_prot_model = './models/ESM2'
-    
-    smiles_model_name = local_smiles_model if os.path.exists(local_smiles_model) else 'seyonec/ChemBERTa-zinc-base-v1'
-    prot_model_name = local_prot_model if os.path.exists(local_prot_model) else 'facebook/esm2_t6_8M_UR50D'
-    
-    print(f"Using SMILES Model: {smiles_model_name}")
-    print(f"Using Protein Model: {prot_model_name}")
-    
     try:
         # Use use_fast=False to avoid IndexError in batch_encode_plus on some datasets
-        smi_tokenizer = AutoTokenizer.from_pretrained(smiles_model_name, use_fast=False)
-        prot_tokenizer = AutoTokenizer.from_pretrained(prot_model_name, use_fast=False)
+        smi_tokenizer = AutoTokenizer.from_pretrained('seyonec/ChemBERTa-zinc-base-v1', use_fast=False)
+        prot_tokenizer = AutoTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D', use_fast=False)
     except Exception as e:
         print(f"Error loading tokenizers: {e}")
         return
@@ -98,9 +87,7 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
             model = get_model(model_name, 
                               drug_dim=256, prot_dim=512, hidden_dim=hidden_dim, fine_tune=fine_tune,
                               drug_vocab_size=len(smi_tokenizer),
-                              prot_vocab_size=len(prot_tokenizer),
-                              smiles_model_name=smiles_model_name,
-                              prot_model_name=prot_model_name).to(device)
+                              prot_vocab_size=len(prot_tokenizer)).to(device)
         except Exception as e:
             print(f"Error initializing model {model_name}: {e}")
             return
