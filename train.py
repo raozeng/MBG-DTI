@@ -14,6 +14,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 # 导入模块
 from architectures import get_model
 from dataset import DTIDataset, collate_dti
+from dataset_seq import SeqDTIDataset, collate_seq, CHARISOSMISET, CHARPROTSET
 
 def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4, folds=5, model_name='mamba_bilstm', fine_tune=False, hidden_dim=512, debug=False):
     """
@@ -31,18 +32,59 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    # --- 2. 数据准备 ---
-    print("Loading Tokenizers (ChemBERTa & ESM-2)...")
-    try:
-        # Use use_fast=False to avoid IndexError in batch_encode_plus on some datasets
-        smi_tokenizer = AutoTokenizer.from_pretrained('seyonec/ChemBERTa-zinc-base-v1', use_fast=False)
-        prot_tokenizer = AutoTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D', use_fast=False)
-    except Exception as e:
-        print(f"Error loading tokenizers: {e}")
-        return
-
-    print("Initializing Dataset...")
-    dataset = DTIDataset(data_path, smi_tokenizer, prot_tokenizer, max_len_drug=128, max_len_prot=350)
+    print(f"Using device: {device}")
+    
+    # Define Baseline Models that use Sequence Encoding
+    SEQ_MODELS = ['deepdta', 'mcanet', 'transformercpi', 'deepconv-dti'] # deepconv-dti treated as deepdta in architectures
+    
+    if model_name in SEQ_MODELS:
+        # --- Sequence Mode (Label Encoding) ---
+        print(f"Model {model_name} detected. Using Sequence Label Encoding...")
+        
+        # Vocab sizes fixed for these models
+        drug_vocab_size = len(CHARISOSMISET)
+        prot_vocab_size = len(CHARPROTSET)
+        
+        print("Initializing SeqDTIDataset...")
+        # DeepDTA paper uses max_len_drug=100, max_len_prot=1000 usually
+        dataset = SeqDTIDataset(data_path, max_len_drug=100, max_len_prot=1000)
+        collate_fn = collate_seq
+        
+        # Tokenizers not needed
+        smi_tokenizer = None
+        prot_tokenizer = None
+        
+        smiles_model_name = None
+        prot_model_name = None
+        
+    else:
+        # --- Graph/BERT/ESM Mode (Default) ---
+        print("Model uses Graph/Pre-trained Encoders. Loading Tokenizers...")
+    
+        # Check for local models
+        local_smiles_model = './models/ChemBERTa'
+        local_prot_model = './models/ESM2'
+        
+        smiles_model_name = local_smiles_model if os.path.exists(local_smiles_model) else 'seyonec/ChemBERTa-zinc-base-v1'
+        prot_model_name = local_prot_model if os.path.exists(local_prot_model) else 'facebook/esm2_t6_8M_UR50D'
+        
+        print(f"Using SMILES Model: {smiles_model_name}")
+        print(f"Using Protein Model: {prot_model_name}")
+        
+        try:
+            # Use use_fast=False to avoid IndexError in batch_encode_plus on some datasets
+            smi_tokenizer = AutoTokenizer.from_pretrained('seyonec/ChemBERTa-zinc-base-v1', use_fast=False)
+            prot_tokenizer = AutoTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D', use_fast=False)
+        except Exception as e:
+            print(f"Error loading tokenizers: {e}")
+            return
+            
+        print("Initializing Dataset (Graph/Token Mode)...")
+        dataset = DTIDataset(data_path, smi_tokenizer, prot_tokenizer, max_len_drug=128, max_len_prot=350)
+        collate_fn = collate_dti
+        
+        drug_vocab_size = len(smi_tokenizer)
+        prot_vocab_size = len(prot_tokenizer)
     
     if debug:
         print(f"!!! DEBUG MODE: Using small subset of data ({min(1000, len(dataset))} samples) !!!")
@@ -77,8 +119,8 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
         train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
         val_subsampler = torch.utils.data.SubsetRandomSampler(val_ids)
         
-        train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_subsampler, collate_fn=collate_dti)
-        val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_subsampler, collate_fn=collate_dti)
+        train_loader = DataLoader(dataset, batch_size=batch_size, sampler=train_subsampler, collate_fn=collate_fn)
+        val_loader = DataLoader(dataset, batch_size=batch_size, sampler=val_subsampler, collate_fn=collate_fn)
         
         # --- 3. 模型初始化 ---
         print(f"Initializing {model_name}...")
@@ -86,8 +128,8 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
             # Pass vocab sizes for baseline models that use Embedding layers
             model = get_model(model_name, 
                               drug_dim=256, prot_dim=512, hidden_dim=hidden_dim, fine_tune=fine_tune,
-                              drug_vocab_size=len(smi_tokenizer),
-                              prot_vocab_size=len(prot_tokenizer)).to(device)
+                              drug_vocab_size=drug_vocab_size,
+                              prot_vocab_size=prot_vocab_size).to(device)
         except Exception as e:
             print(f"Error initializing model {model_name}: {e}")
             return
