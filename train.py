@@ -42,8 +42,8 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
         print(f"Model {model_name} detected. Using Sequence Label Encoding...")
         
         # Vocab sizes fixed for these models
-        drug_vocab_size = len(CHARISOSMISET)
-        prot_vocab_size = len(CHARPROTSET)
+        drug_vocab_size = max(CHARISOSMISET.values()) + 1
+        prot_vocab_size = max(CHARPROTSET.values()) + 1
         
         print("Initializing SeqDTIDataset...")
         # DeepDTA paper uses max_len_drug=100, max_len_prot=1000 usually
