@@ -224,8 +224,8 @@ def validate_full(model, loader, criterion, device):
     
     with torch.no_grad():
         for batch in loader:
-            d_input = (batch['drug_input'][0].to(device), batch['drug_input'][1].to(device), batch['drug_input'][2].to(device))
-            p_input = (batch['prot_input'][0].to(device), batch['prot_input'][1].to(device), batch['prot_input'][2].to(device))
+            d_input = tuple(x.to(device) if x is not None else None for x in batch['drug_input'])
+            p_input = tuple(x.to(device) if x is not None else None for x in batch['prot_input'])
             labels = batch['labels'].to(device).unsqueeze(1)
             
             outputs = model(d_input, p_input)
