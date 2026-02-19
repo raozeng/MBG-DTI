@@ -35,7 +35,7 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
     print(f"Using device: {device}")
     
     # Define Baseline Models that use Sequence Encoding
-    SEQ_MODELS = ['deepdta', 'mcanet', 'transformercpi', 'deepconv-dti'] # deepconv-dti treated as deepdta in architectures
+    SEQ_MODELS = ['deepdta', 'mcanet', 'transformerdti', 'deepconv-dti'] # deepconv-dti treated as deepdta in architectures
     
     if model_name in SEQ_MODELS:
         # --- Sequence Mode (Label Encoding) ---
