@@ -22,7 +22,7 @@ def main():
     train_parser.add_argument('--folds', type=int, default=5, help='Number of folds for Cross Validation')
     train_parser.add_argument('--hidden_dim', type=int, default=256, help='Hidden dimension size')
     train_parser.add_argument('--model_name', type=str, default='mamba_bilstm', 
-                              choices=['mamba_bilstm', 'deepdta', 'transformercpi', 'mcanet', 'deepconv-dti', 'mambabilstmseqonly', 'transformerbilstm'],
+                              choices=['mamba_bilstm', 'deepdta', 'transformerdti', 'mcanet', 'deepconv-dti', 'mambabilstmseqonly', 'transformerbilstm'],
                               help='Model architecture to use')
     train_parser.add_argument('--fine_tune', action='store_true', help='Fine-tune pre-trained encoders (ChemBERTa/ESM-2)')
     train_parser.add_argument('--debug', action='store_true', help='Run in debug mode (fast, small data)')
@@ -32,7 +32,7 @@ def main():
     test_parser.add_argument('--weights', type=str, required=True, help='Path to model weights file')
     test_parser.add_argument('--data', type=str, default=r'./data/Davis.txt', help='Path to test data file')
     test_parser.add_argument('--model_name', type=str, default='mamba_bilstm', 
-                            choices=['mamba_bilstm', 'deepdta', 'transformer', 'graphdta', 'mcanet'],
+                            choices=['mamba_bilstm', 'deepdta', 'transformerdti', 'graphdta', 'mcanet'],
                             help='Model architecture to use')
     
     args = parser.parse_args()

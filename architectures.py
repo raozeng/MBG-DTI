@@ -344,91 +344,152 @@ class DeepDTA(nn.Module):
         return self.fc(combined)
 
 
-class TransformerCPI(nn.Module):
+class TransformerDTI(nn.Module):
     """
-    TransformerCPI: Transformer-based Chem-Prot Interaction
-    Uses simplified Transformer Encoders for both inputs
+    TransformerDTI (MolTrans-inspired):
+    1. Transformer Encoder for Drug (SMILES)
+    2. Transformer Encoder for Protein (Sequence)
+    3. Interaction Map Computation (Outer Product)
+    4. CNN Decoder on Interaction Map
     """
     def __init__(self, drug_vocab_size=600, prot_vocab_size=26, 
                  d_model=128, nhead=4, num_layers=2):
-        super(TransformerCPI, self).__init__()
+        super(TransformerDTI, self).__init__()
         
+        # 1. Encoders
         self.drug_embed = nn.Embedding(drug_vocab_size, d_model)
         self.prot_embed = nn.Embedding(prot_vocab_size, d_model)
         
+        # Positional Encoding is implicitly handled by Transformer's ability to attend to all positions,
+        # but usually requires explicit PE. For simplicity in DTI baselines, we often skip or use learned PE.
+        # Here we rely on the TransformerEncoder's ability to learn relative patterns.
+        
         self.drug_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward=d_model*2, batch_first=True),
+            nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward=d_model*4, batch_first=True, dropout=0.1),
             num_layers
         )
         
         self.prot_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward=d_model*2, batch_first=True),
+            nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward=d_model*4, batch_first=True, dropout=0.1),
             num_layers
         )
         
+        # 2. Interaction Map Decoder (CNN)
+        # Input: (B, 1, Ld, Lp) -> Interaction Map
+        # We use a simplified CNN to extract patterns from the map
+        self.cnn = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=(3, 3), stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2, 2)), # Downsample 2x
+            nn.Conv2d(32, 64, kernel_size=(3, 3), stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2, 2)), # Downsample 2x -> Total 4x reduction
+            nn.Conv2d(64, 128, kernel_size=(3, 3), stride=1, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveMaxPool2d((1, 1)) # Global Max Pooling -> (B, 128, 1, 1)
+        )
+        
         self.classifier = nn.Sequential(
-            nn.Linear(d_model * 2, 128),
+            nn.Linear(128, 64),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(128, 1)
+            nn.Linear(64, 1)
         )
         
     def forward(self, drug_input, prot_input):
         d_ids, d_mask = drug_input[0], drug_input[1]
         p_ids, p_mask = prot_input[0], prot_input[1]
         
-        d_x = self.drug_embed(d_ids) # (B, L, D)
-        p_x = self.prot_embed(p_ids)
+        # Embed
+        d_x = self.drug_embed(d_ids) # (B, Ld, D)
+        p_x = self.prot_embed(p_ids) # (B, Lp, D)
         
-        # Pass masks (invert logic for Transformer usually, but PyTorch handle src_key_padding_mask as True=ignore)
-        # Our mask is 1=valid, 0=pad. So we need ~mask.bool()
+        # Encode
+        # Masks: 0=pad, 1=valid. Transformer requires True=ignore (pad). 
+        # So mask should be True where input is PAD (0).
         d_padding_mask = (d_mask == 0)
         p_padding_mask = (p_mask == 0)
         
-        d_out = self.drug_encoder(d_x, src_key_padding_mask=d_padding_mask)
-        p_out = self.prot_encoder(p_x, src_key_padding_mask=p_padding_mask)
+        d_feat = self.drug_encoder(d_x, src_key_padding_mask=d_padding_mask) # (B, Ld, D)
+        p_feat = self.prot_encoder(p_x, src_key_padding_mask=p_padding_mask) # (B, Lp, D)
         
-        # Global Mean Pooling (ignoring pads) -> simplified to simple mean for baseline
-        d_vec = d_out.mean(dim=1)
-        p_vec = p_out.mean(dim=1)
+        # Interaction Map
+        # (B, Ld, D) x (B, D, Lp) -> (B, Ld, Lp)
+        interaction_map = torch.bmm(d_feat, p_feat.transpose(1, 2)).unsqueeze(1) # (B, 1, Ld, Lp)
         
-        combined = torch.cat([d_vec, p_vec], dim=1)
-        return self.classifier(combined)
+        # CNN Decode
+        map_feat = self.cnn(interaction_map).flatten(1) # (B, 128)
+        
+        return self.classifier(map_feat)
 
 
 class MCANet(nn.Module):
     """
-    MCANet: Multi-source Co-Attention Network (Simplified/Representative)
-    Uses Co-Attention between Drug and Protein features
+    MCANet: Multi-source Co-Attention Network (Enhanced)
+    Architecture:
+    1. CNN Encoder for Drug
+    2. CNN Encoder for Protein
+    3. Co-Attention / Cross-Attention
+    4. Prediction
     """
     def __init__(self, drug_vocab_size=600, prot_vocab_size=26, hidden_dim=128):
         super(MCANet, self).__init__()
         
+        # 1. Drug Encoder (CNN)
         self.drug_embed = nn.Embedding(drug_vocab_size, hidden_dim)
-        self.prot_embed = nn.Embedding(prot_vocab_size, hidden_dim)
+        self.drug_cnn = nn.Sequential(
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=4, padding=2),
+            nn.ReLU(),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=6, padding=3),
+            nn.ReLU(),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=8, padding=4),
+            nn.ReLU()
+        )
         
-        # Co-Attention Weight Matrices
+        # 2. Protein Encoder (CNN)
+        self.prot_embed = nn.Embedding(prot_vocab_size, hidden_dim)
+        self.prot_cnn = nn.Sequential(
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=4, padding=2),
+            nn.ReLU(),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=8, padding=4),
+            nn.ReLU(),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=12, padding=6),
+            nn.ReLU()
+        )
+        
+        # 3. Co-Attention
         self.W_d = nn.Linear(hidden_dim, hidden_dim)
         self.W_p = nn.Linear(hidden_dim, hidden_dim)
         
         self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim * 2, 64),
+            nn.Linear(hidden_dim * 2, 1024),
             nn.ReLU(),
-            nn.Linear(64, 1)
+            nn.Dropout(0.1),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 1)
         )
         
     def forward(self, drug_input, prot_input):
         d_ids = drug_input[0]
         p_ids = prot_input[0]
         
-        d_feat = self.drug_embed(d_ids) # (B, Ld, H)
-        p_feat = self.prot_embed(p_ids) # (B, Lp, H)
+        # Embed: (B, L, H)
+        d_feat = self.drug_embed(d_ids) 
+        p_feat = self.prot_embed(p_ids)
         
-        # Valid Co-Attention (Baseline impl)
-        # Affinity Matrix
-        aff = torch.bmm(d_feat, p_feat.transpose(1, 2)) # (B, Ld, Lp)
+        # CNN: (B, L, H) -> (B, H, L) for Conv1d -> (B, H, L) -> (B, L, H)
+        d_feat = self.drug_cnn(d_feat.permute(0, 2, 1)).permute(0, 2, 1)
+        p_feat = self.prot_cnn(p_feat.permute(0, 2, 1)).permute(0, 2, 1)
         
-        # Attention maps
+        # Co-Attention
+        # Affinity Matrix (B, Ld, Lp)
+        Q_d = self.W_d(d_feat)
+        Q_p = self.W_p(p_feat)
+        aff = torch.bmm(Q_d, Q_p.transpose(1, 2))
+        
+        # Attention Weights
         att_d = F.softmax(aff.max(dim=2)[0], dim=1).unsqueeze(2) # (B, Ld, 1)
         att_p = F.softmax(aff.max(dim=1)[0], dim=1).unsqueeze(2) # (B, Lp, 1)
         
@@ -571,8 +632,8 @@ def get_model(model_name, **kwargs):
     elif 'deep' in model_name: # DeepDTA, DeepConv-DTI
         return DeepDTA(drug_vocab_size=kwargs.get('drug_vocab_size', 600),
                        prot_vocab_size=kwargs.get('prot_vocab_size', 26))
-    elif 'transformer' in model_name: # TransformerCPI
-        return TransformerCPI(drug_vocab_size=kwargs.get('drug_vocab_size', 600),
+    elif 'transformer' in model_name: # TransformerDTI (MolTrans-inspired)
+        return TransformerDTI(drug_vocab_size=kwargs.get('drug_vocab_size', 600),
                               prot_vocab_size=kwargs.get('prot_vocab_size', 26))
     elif 'mcanet' in model_name: # MCANet
         return MCANet(drug_vocab_size=kwargs.get('drug_vocab_size', 600),
