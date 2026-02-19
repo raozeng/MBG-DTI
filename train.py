@@ -149,8 +149,8 @@ def train_model(data_path, data_name='Davis', batch_size=64, epochs=100, lr=1e-4
             
             loop = tqdm(train_loader, desc=f"Fold {fold+1} Epoch {epoch+1}/{epochs}", leave=False)
             for batch in loop:
-                d_input = (batch['drug_input'][0].to(device), batch['drug_input'][1].to(device), batch['drug_input'][2].to(device))
-                p_input = (batch['prot_input'][0].to(device), batch['prot_input'][1].to(device), batch['prot_input'][2].to(device))
+                d_input = tuple(x.to(device) if x is not None else None for x in batch['drug_input'])
+                p_input = tuple(x.to(device) if x is not None else None for x in batch['prot_input'])
                 labels = batch['labels'].to(device).unsqueeze(1)
                 
                 optimizer.zero_grad()
