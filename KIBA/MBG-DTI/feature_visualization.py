@@ -140,8 +140,8 @@ if __name__ == '__main__':
     # ==========================
     # 1. 准备配置和路径
     # ==========================
-    # 这里请修改为您实际的 pth 路径
-    model_path = './train_result/model_fold_1.pth'
+    # 动态构建绝对路径，避免在不同目录下执行脚本导致的 FileNotFoundError
+    model_path = os.path.join(current_dir, 'train_result', 'model_fold_1.pth')
     
     print("1. 加载模型结构...")
     # 加载模型（参数需要和训练时保持一致）
@@ -159,7 +159,7 @@ if __name__ == '__main__':
     # 3. 准备测试数据 DataLoader
     # ==========================
     print("3. 准备数据 DataLoader...")
-    data_path = '../../data/KIBA.txt'
+    data_path = os.path.join(root_dir, 'data', 'KIBA.txt')
     
     print("加载 Tokenizers...")
     smi_tokenizer = AutoTokenizer.from_pretrained('seyonec/ChemBERTa-zinc-base-v1')
