@@ -12,8 +12,9 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 # 确保能导入项目中的文件
-sys.path.append(r'd:\Research\MBG-DTI')
-sys.path.append(r'd:\Research\MBG-DTI-Results')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(os.path.dirname(current_dir))
+sys.path.append(root_dir)
 from architectures import MambaBiLSTMModel
 from dataset import DTIDataset, collate_dti
 
@@ -140,7 +141,7 @@ if __name__ == '__main__':
     # 1. 准备配置和路径
     # ==========================
     # 这里请修改为您实际的 pth 路径
-    model_path = r'd:\Research\MBG-DTI-Results\Results\KIBA\MBG-DTI\train_result\model_fold_1.pth'
+    model_path = './train_result/model_fold_1.pth'
     
     print("1. 加载模型结构...")
     # 加载模型（参数需要和训练时保持一致）
@@ -158,7 +159,7 @@ if __name__ == '__main__':
     # 3. 准备测试数据 DataLoader
     # ==========================
     print("3. 准备数据 DataLoader...")
-    data_path = r'd:\Research\MBG-DTI-Results\Datasets\KIBA.txt'
+    data_path = '../../data/KIBA.txt'
     
     print("加载 Tokenizers...")
     smi_tokenizer = AutoTokenizer.from_pretrained('seyonec/ChemBERTa-zinc-base-v1')
