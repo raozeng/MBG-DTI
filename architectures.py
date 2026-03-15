@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,10 +6,15 @@ from transformers import AutoModel
 from torch_geometric.nn import GATConv, GCNConv, global_mean_pool
 from mamba_ssm import Mamba
 
+# 获取当前工作空间的根目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+default_smiles_model = os.path.join(current_dir, 'huggingface_models', 'seyonec_ChemBERTa-zinc-base-v1')
+default_esm_model = os.path.join(current_dir, 'huggingface_models', 'facebook_esm2_t6_8M_UR50D')
+
 # --- Layer 1: 输入与表征层 ---
 
 class DrugEncoder(nn.Module):
-    def __init__(self, smiles_model_name='seyonec/ChemBERTa-zinc-base-v1', 
+    def __init__(self, smiles_model_name=default_smiles_model, 
                  graph_in_channels=74, graph_hidden_channels=128, 
                  out_channels=256, fine_tune=False, use_graph=True):
         super(DrugEncoder, self).__init__()
@@ -59,7 +65,7 @@ class DrugEncoder(nn.Module):
             return self.seq_proj(seq_feat)
 
 class ProteinEncoder(nn.Module):
-    def __init__(self, esm_model_name='facebook/esm2_t6_8M_UR50D',
+    def __init__(self, esm_model_name=default_esm_model,
                  graph_in_channels=1280, graph_hidden_channels=256,
                  out_channels=512, fine_tune=False, use_graph=True):
         super(ProteinEncoder, self).__init__()
