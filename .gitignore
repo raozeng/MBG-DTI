@@ -24,6 +24,7 @@ wheels/
 # Checkpoints (Too large for GitHub)
 checkpoints/
 *.pth
+huggingface_models/
 
 # Large Data (Optional, uncomment if you want to exclude data)
 # data/KIBA.txt

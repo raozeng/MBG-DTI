@@ -15,6 +15,7 @@ from transformers import AutoTokenizer
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(root_dir)
+os.environ["HF_HUB_OFFLINE"] = "1"  # 防止联网导致网络不可达报错
 from architectures import MambaBiLSTMModel
 from dataset import DTIDataset, collate_dti
 
@@ -148,7 +149,7 @@ if __name__ == '__main__':
     model = MambaBiLSTMModel(drug_dim=256, prot_dim=512, hidden_dim=256, fine_tune=False)
     
     print(f"2. 加载模型权重: {model_path}...")
-    state_dict = torch.load(model_path, map_location=device)
+    state_dict = torch.load(model_path, map_location=device, weights_only=False)
     # 如果是用 DataParallel 训练的，可能键名带有 'module.' 前缀，做一下处理
     if list(state_dict.keys())[0].startswith('module.'):
         state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
@@ -161,9 +162,12 @@ if __name__ == '__main__':
     print("3. 准备数据 DataLoader...")
     data_path = os.path.join(root_dir, 'data', 'KIBA.txt')
     
-    print("加载 Tokenizers...")
-    smi_tokenizer = AutoTokenizer.from_pretrained('seyonec/ChemBERTa-zinc-base-v1')
-    prot_tokenizer = AutoTokenizer.from_pretrained('facebook/esm2_t6_8M_UR50D')
+    print("加载本地 Tokenizers...")
+    smi_tokenizer_path = os.path.join(root_dir, 'huggingface_models', 'seyonec_ChemBERTa-zinc-base-v1')
+    prot_tokenizer_path = os.path.join(root_dir, 'huggingface_models', 'facebook_esm2_t6_8M_UR50D')
+    
+    smi_tokenizer = AutoTokenizer.from_pretrained(smi_tokenizer_path)
+    prot_tokenizer = AutoTokenizer.from_pretrained(prot_tokenizer_path)
     
     print(f"装载数据集: {data_path}")
     test_dataset = DTIDataset(data_path, smi_tokenizer, prot_tokenizer, max_len_drug=128, max_len_prot=350)
